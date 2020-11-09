@@ -1,0 +1,139 @@
+package http_parser
+
+import (
+	"fmt"
+	"strings"
+)
+
+type ParsedHttpRequest struct {
+	Method        string
+	RequestTarget string
+	HttpVersion   string
+}
+
+type ParseError struct{}
+
+func (pe ParseError) Error() string {
+	return fmt.Sprint("invalid format")
+}
+
+func Parse(request string) (ParsedHttpRequest, error) {
+	eachLines := strings.Split(request, "\r\n")
+
+	if len(eachLines) < 1 {
+		return ParsedHttpRequest{}, ParseError{}
+	}
+
+	requestLineTokens := strings.Split(eachLines[0], " ")
+
+	if len(requestLineTokens) != 3 {
+		return ParsedHttpRequest{}, ParseError{}
+	}
+
+	method, target, version := requestLineTokens[0], requestLineTokens[1], requestLineTokens[2]
+
+	if !isValidHttpMethod(method) || !isValidRequestTarget(target) {
+		return ParsedHttpRequest{}, ParseError{}
+	}
+
+	prh := ParsedHttpRequest{
+		method,
+		target,
+		version,
+	}
+
+	return prh, nil
+}
+
+func isValidHttpMethod(method string) bool {
+	HttpMethods := []string{"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"}
+
+	for _, httpMethod := range HttpMethods {
+		if httpMethod == method {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isValidRequestTarget(target string) bool {
+	return isValidOriginForm(target)
+}
+
+func isValidOriginForm(target string) bool {
+	return isWithinPchar(target)
+}
+
+func isValidPchar(target string, int i) bool {
+	for i := 0; i < len(target); {
+		c := target[i]
+
+		if i == 0 && c != '/' {
+			return false
+		}
+
+		if c == '/' {
+			i++
+			continue
+		}
+		if isValidUnreserved(c) {
+			i++
+			continue
+		}
+
+		if isValidSubDelims(c) {
+			i++
+			continue
+		}
+
+		if c == ':' || c == '@' {
+			continue
+		}
+
+		if c == '%' && isValidPct(target, i) {
+			i += 3
+			continue
+		}
+
+		return false
+	}
+
+	return true
+}
+
+func CheckUnreserved(c byte) int {
+	if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' ||
+		c == '-' || c == '.' || c == '_' || c == '~' {
+		return 1
+	}
+	return 0
+}
+
+func CheckPct(target string) int {
+	if idx+2 > len(target)-1 {
+		return 0
+	}
+
+	idx++
+
+	for i := 0; i < 2; i++ {
+		c := target[idx]
+		if 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F' || '0' <= c && c <= '9' {
+			idx++
+			continue
+		}
+
+		return 0
+	}
+
+	return 2
+}
+
+func CheckSubDelims(c byte) int {
+	if c == '!' || c == '$' || c == '&' || c == '\'' || c == '(' ||
+		c == ')' || c == '*' || c == '+' || c == ',' || c == ';' || c == '=' {
+		return 1
+	}
+	return 0
+}
